@@ -65,7 +65,7 @@ bool CkeyIsPressed = false;
 bool UpKeyIsPressed = false;
 bool DownKeyIsPressed = false;
 
-int resolution = 2;
+int resolution = 8;
 std::vector<unsigned short> indices; //Triangles concaténés dans une liste
 std::vector<std::vector<unsigned short> > triangles;
 std::vector<glm::vec3> indexed_vertices;
