@@ -13,13 +13,17 @@ uniform mat4 projection;
 
 out vec2 o_uv0;
 
+uniform sampler2D textureCoords;
+
+vec4 variable;
+
+out vec4 height;
+
 void main(){
 
-        gl_Position = projection * view * vec4(vec3(model * vec4(vertices_position_modelspace, 1.0)), 1.0);
-        o_uv0 = uv0;
+        height = texture(textureCoords, uv0);
+        variable = vec4(vec3(vertices_position_modelspace.x, vertices_position_modelspace.y + height.r, vertices_position_modelspace.z), 1);
 
-        /*
-        uniform sampler2D colorTexture;
-        variable  = position.x, position.y + height, position.z
-        glPosition * variable*/
+        gl_Position = projection * view * vec4(vec3(model * vec4(vertices_position_modelspace, 1.0)), 1.0)*variable;
+        o_uv0 = uv0;
 }

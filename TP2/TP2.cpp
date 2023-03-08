@@ -28,15 +28,24 @@ using namespace glm;
 #include "stb_image.h"
 
 void processInput(GLFWwindow *window);
+void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+void scroll_callback(GLFWwindow *window, double xpos, double ypos);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
 // camera
-glm::vec3 camera_position   = glm::vec3(0.0f, 0.0f,  3.0f);
+glm::vec3 camera_position   = glm::vec3(0.0f, 0.5f, 3.0f);
 glm::vec3 camera_target = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 camera_up    = glm::vec3(0.0f, 1.0f,  0.0f);
+
+bool firstMouse = true;
+float yaw = -90.0f;
+float pitch = 0.0f;
+float lastX = 400;
+float lastY = 300;
+float fov = 45.0f;
 
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -45,6 +54,15 @@ float lastFrame = 0.0f;
 //rotation
 float angle = 0.;
 float zoom = 1.;
+
+
+bool keyIsPressed = false;
+
+int resolution = 2;
+std::vector<unsigned short> indices; //Triangles concaténés dans une liste
+std::vector<std::vector<unsigned short> > triangles;
+std::vector<glm::vec3> indexed_vertices;
+std::vector<float> textureData;
 /*******************************************************************************/
 
 std::vector<int> getIndex(std::vector<glm::vec3> indexed_vertices, glm::vec3 point) {
@@ -60,8 +78,9 @@ std::vector<int> getIndex(std::vector<glm::vec3> indexed_vertices, glm::vec3 poi
 }
 
 
-std::vector<glm::vec3> generatePlan(float length, int resolution/*, unsigned char *data, float *squareTextureData, int nbChannels*/) {
-    std::vector<glm::vec3> indexed_vertices;
+std::vector<glm::vec3> generatePlan(float length, int resolution) {
+
+    std::vector<glm::vec3> vertices;
 
     float pas = length/(float)resolution;
 
@@ -70,9 +89,9 @@ std::vector<glm::vec3> generatePlan(float length, int resolution/*, unsigned cha
     float nbSquare = pow(resolution, 2);
 
     float pasBasX = 0;
-    float pasBasY = 0;
+    float pasBasZ = 0;
     float pasHautX = pas;
-    float pasHautY = pas;
+    float pasHautZ = pas;
 
     int cpt = floor(nbSquare/resolution)-1;
 
@@ -80,23 +99,23 @@ std::vector<glm::vec3> generatePlan(float length, int resolution/*, unsigned cha
 
     for (int elt = 0; elt < nbSquare; elt++) {
 
-        basGauche = glm::vec3(pasBasX, pasBasY, 0);
-        basDroit = glm::vec3(pasHautX, pasBasY, 0);
+        basGauche = glm::vec3(pasBasX, 0, pasBasZ);
+        basDroit = glm::vec3(pasHautX, 0, pasBasZ);
 
-        hautDroit = glm::vec3(pasHautX, pasHautY, 0);
-        hautGauche = glm::vec3(pasBasX, pasHautY, 0);
+        hautDroit = glm::vec3(pasHautX, 0, pasHautZ);
+        hautGauche = glm::vec3(pasBasX, 0, pasHautZ);
 
-        indexed_vertices.push_back(basGauche);
-        indexed_vertices.push_back(basDroit);
-        indexed_vertices.push_back(hautDroit);
-        indexed_vertices.push_back(hautGauche);
+        vertices.push_back(basGauche);
+        vertices.push_back(basDroit);
+        vertices.push_back(hautDroit);
+        vertices.push_back(hautGauche);
 
         if (elt == cpt) {
             pasBasX -= pas*(resolution-1);
             pasHautX -= pas*(resolution-1);
 
-            pasBasY += pas;
-            pasHautY += pas;
+            pasBasZ += pas;
+            pasHautZ += pas;
 
             cpt += resolution;
         }
@@ -106,102 +125,82 @@ std::vector<glm::vec3> generatePlan(float length, int resolution/*, unsigned cha
         }
     }
 
-    /*for (int i = 0; i < indexed_vertices.size(); i++) {
-
-        float randZ = (float)(rand()) / (float)(RAND_MAX);
-        
-        if(std::find(indexed_vertices.begin(), indexed_vertices.end(), indexed_vertices[i]) != indexed_vertices.end()) {
-            std::vector<int> indexList = getIndex(indexed_vertices, indexed_vertices[i]);
-
-            for (int j = 0; j < indexList.size(); j++) {
-                indexed_vertices[indexList[j]][2] = 0;
-            }
-        }
-        else {
-            indexed_vertices[i][2] = 0;
-        }
-
-    }*/
-
-    /*for (int i = 0; i < indexed_vertices.size(); i+=2) {
-    // Calculer les coordonnées de texture correspondantes
-    float u = squareTextureData[i*2];
-    float v = squareTextureData[i*2+1];
-
-    // Calculer l'index de la hauteur
-    int x = (int) (u * resolution);
-    int y = (int) (v * resolution);
-    int index = (y * resolution + x) * nbChannels;
-
-    // Lire la hauteur à partir de la heightmap
-    float heightValue = (float) data[index] / 255.0f;
-
-    // Affecter la hauteur à la valeur y de l'index
-    float test = heightValue /** 255*//*;
-
-    //indexed_vertices[i][2] = test;
-
-    std::cout << test << std::endl;
-}*/
-
-    //std::cout << "(" << indexed_vertices[0][0] << ", " << indexed_vertices[0][1] << ", " << indexed_vertices[0][2] << ") (" << indexed_vertices[1][0] << ", " << indexed_vertices[1][1] << ", " << indexed_vertices[1][2] << ") (" << indexed_vertices[4][0] << ", " << indexed_vertices[4][1] << ", " << indexed_vertices[4][2] << std::endl;
-
-
-    return indexed_vertices;
-
+    return vertices;
 }
 
 std::vector<unsigned short> generateTriangle(int resolution) {
-    std::vector<unsigned short> indices;
+
+    std::vector<unsigned short> id;
 
     int j = 0, cptResolution = 0;
 
     for (int i = 0; i < pow(resolution, 2)*4; i+=4) {
 
-        indices.push_back(i);
-        indices.push_back(i+1);
-        indices.push_back(i+2);
+        id.push_back(i);
+        id.push_back(i+1);
+        id.push_back(i+2);
 
-        indices.push_back(i);
-        indices.push_back(i+2);
-        indices.push_back(i+3);
+        id.push_back(i);
+        id.push_back(i+2);
+        id.push_back(i+3);
 
     }
 
-    return indices;
+    return id;
 }
 
-void generateTextureCoords(float length, int resolution, float *squareTextureData) {
+std::vector<float> generateTextureCoords(float length, int resolution/*, float *squareTextureData*/) {
 
-    float nbSquare = pow(resolution, 2);
+    //squareTextureData = new float[resolution * resolution * 8];
+    std::vector<float> data;
+    data.resize(resolution * resolution * 8);
 
     float pas = length/(float)resolution;
 
+    float positioni = 0, positionj;
+
+    float nbSquare = pow(resolution, 2);
+
     float pasBasX = 0;
-    float pasBasY = 0;
+    float pasBasZ = 0;
     float pasHautX = pas;
-    float pasHautY = pas;
+    float pasHautZ = pas;
 
-    for (int indexTexture = 0; indexTexture < /*resolution * resolution * 8*/32; indexTexture+=8) {
+    int cpt = floor(nbSquare/resolution)-1;
 
-        squareTextureData[indexTexture] = pasBasX;
-        squareTextureData[indexTexture+1] = pasBasY;
-        squareTextureData[indexTexture+2] = pasHautX;
-        squareTextureData[indexTexture+3] = pasBasY;
-        squareTextureData[indexTexture+4] = pasHautX;
-        squareTextureData[indexTexture+5] = pasHautY;
-        squareTextureData[indexTexture+6] = pasBasX;
-        squareTextureData[indexTexture+7] = pasHautY;
+    int elt = 0;
+
+    glm::vec3 basGauche, basDroit, hautGauche, hautDroit;
+
+    for (int indexTexture = 0; indexTexture < resolution * resolution * 8; indexTexture+=8) {
+
+        data[indexTexture] = pasBasX;
+        data[indexTexture+1] = pasBasZ;
+        data[indexTexture+2] = pasHautX;
+        data[indexTexture+3] = pasBasZ;
+        data[indexTexture+4] = pasHautX;
+        data[indexTexture+5] = pasHautZ;
+        data[indexTexture+6] = pasBasX;
+        data[indexTexture+7] = pasHautZ;
+
+        if (elt == cpt) {
+            pasBasX -= pas*(resolution-1);
+            pasHautX -= pas*(resolution-1);
+
+            pasBasZ += pas;
+            pasHautZ += pas;
+
+            cpt += resolution;
+        }
+        else {
+            pasBasX += pas;
+            pasHautX += pas;
+        }
+
+        elt++;
     }
 
-    /*squareTextureData[0] = 0;
-    squareTextureData[0+1] = 0;
-    squareTextureData[0+2] = 1;
-    squareTextureData[0+3] = 0;
-    squareTextureData[0+4] = 1;
-    squareTextureData[0+5] = 1;
-    squareTextureData[0+6] = 0;
-    squareTextureData[0+7] = 1;*/
+    return data;
 
 }
 
@@ -241,10 +240,13 @@ int main( void )
         return -1;
     }
 
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetCursorPosCallback(window, scroll_callback);
+
     // Ensure we can capture the escape key being pressed below
     glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
     // Hide the mouse and enable unlimited mouvement
-    //  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Set the mouse at the center of the screen
     glfwPollEvents();
@@ -253,6 +255,7 @@ int main( void )
     // Dark blue background
     glClearColor(0.8f, 0.8f, 0.8f, 0.0f);
 
+
     // Enable depth test
     glEnable(GL_DEPTH_TEST);
     // Accept fragment if it closer to the camera than the former one
@@ -260,6 +263,7 @@ int main( void )
 
     // Cull triangles which normal is not towards the camera
     //glEnable(GL_CULL_FACE);
+
 
     GLuint VertexArrayID;
     glGenVertexArrays(1, &VertexArrayID);
@@ -272,46 +276,44 @@ int main( void )
     // Get a handle for our "Model View Projection" matrices uniforms
 
     /****************************************/
-    std::vector<unsigned short> indices; //Triangles concaténés dans une liste
+    /*std::vector<unsigned short> indices; //Triangles concaténés dans une liste
     std::vector<std::vector<unsigned short> > triangles;
-    std::vector<glm::vec3> indexed_vertices;
+    std::vector<glm::vec3> indexed_vertices;*/
 
     //Chargement du fichier de maillage
     /*std::string filename("cube.off");
     loadOFF(filename, indexed_vertices, indices, triangles );*/
-    int resolution = 2;
 
-    float squareTextureData[/*resolution * resolution **/ 32];
-    generateTextureCoords(1, resolution, &squareTextureData[0]);
+    //squareTextureData[resolution * resolution * 8];
+    textureData.clear();
+    textureData = generateTextureCoords(1, resolution);
 
+    indexed_vertices.clear();
+    indexed_vertices = generatePlan(1, resolution);
 
-    indexed_vertices = generatePlan(1, resolution/*, data, &squareTextureData[0], nbChannels*/);
-
-    //stbi_image_free(data);
-
+    indices.clear();
     indices = generateTriangle(resolution);
 
     // Load it into a VBO
-
     GLuint vertexbuffer;
-    glGenBuffers(1, &vertexbuffer);
+    /*glGenBuffers(1, &vertexbuffer);
     glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-    glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);*/
 
     // Generate a buffer for the indices as well
     GLuint elementbuffer;
-    glGenBuffers(1, &elementbuffer);
+    /*glGenBuffers(1, &elementbuffer);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);*/
 
     GLuint textureBuffer;
-    glGenBuffers(1, &textureBuffer);
+    /*glGenBuffers(1, &textureBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, textureBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(squareTextureData), &squareTextureData, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(squareTextureData), &squareTextureData, GL_STATIC_DRAW);*/
 
-    unsigned int texture;
+    /*unsigned int texture;
     glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, texture);*/
 
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -369,6 +371,17 @@ int main( void )
         glUniformMatrix4fv(glGetUniformLocation(programID, "model"), 1, false, &modelMatrix[0][0]);
 
 
+        glGenBuffers(1, &vertexbuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+    glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);
+
+    glGenBuffers(1, &elementbuffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);
+
+    glGenBuffers(1, &textureBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, textureBuffer);
+    glBufferData(GL_ARRAY_BUFFER, textureData.size() * sizeof(float), &textureData[0], GL_STATIC_DRAW);
 
         // 1rst attribute buffer : vertices
         glEnableVertexAttribArray(0);
@@ -391,7 +404,19 @@ int main( void )
 
         glActiveTexture(GL_TEXTURE0);
         loadBMP_custom("grass.bmp");
-        glUniform1i(glGetUniformLocation(programID, "colorTexture"), 0);
+        glUniform1i(glGetUniformLocation(programID, "grassTexture"), 0);
+
+        glActiveTexture(GL_TEXTURE1);
+        loadBMP_custom("rock.bmp");
+        glUniform1i(glGetUniformLocation(programID, "rockTexture"), 1);
+
+        glActiveTexture(GL_TEXTURE2);
+        loadBMP_custom("snowrocks.bmp");
+        glUniform1i(glGetUniformLocation(programID, "snowrocksTexture"), 2);
+
+        glActiveTexture(GL_TEXTURE3);
+        loadBMP_custom("Heightmap_Mountain.bmp");
+        glUniform1i(glGetUniformLocation(programID, "textureCoords"), 3);
         
         // Draw the triangles !
         glDrawElements(
@@ -406,8 +431,6 @@ int main( void )
         // Swap buffers
         glfwSwapBuffers(window);
         glfwPollEvents();
-
-        //std::cout << "cam : " << camera_position[0] << " " << camera_position[1] << " " << camera_position[2] << std::endl; 
 
     } // Check if the ESC key was pressed or the window was closed
     while( glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS &&
@@ -452,7 +475,7 @@ void processInput(GLFWwindow *window)
         camera_position += glm::normalize(glm::cross(camera_position, camera_up)) * cameraSpeed;
     }
 
-    /*if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { //touche A
+    /*if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS) {
         camera_position += cameraSpeed * glm::vec3(0.0f, 0.0f, -0.2f);
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) { //touche Q
@@ -467,11 +490,92 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
         camera_position += cameraSpeed * glm::vec3(-0.2f, 0.0f, 0.0f);
     }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
         camera_position += cameraSpeed * glm::vec3(0.2f, 0.0f, 0.0f);
     }*/
 
 
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS && !keyIsPressed) {
+        resolution ++;
+
+        std::cout << resolution << std::endl;
+
+        indexed_vertices = generatePlan(1, resolution);
+        indices = generateTriangle(resolution);
+        textureData = generateTextureCoords(1, resolution);
+
+        keyIsPressed = true;
+    }
+    else if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE)
+    {
+        keyIsPressed = false;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_PRESS && !keyIsPressed) {
+        resolution--;
+
+        std::cout << resolution << std::endl;
+
+        indexed_vertices = generatePlan(1, resolution);
+        indices = generateTriangle(resolution);
+        textureData = generateTextureCoords(1, resolution);
+    }
+    else if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_RELEASE)
+    {
+        keyIsPressed = false;
+    }
+
+
+}
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+{
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    std::cout << "hey" << std::endl;
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f; // change this value to your liking
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    // make sure that when pitch is out of bounds, screen doesn't get flipped
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    camera_target = glm::normalize(front);
+}
+
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+// ----------------------------------------------------------------------
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    fov -= (float)yoffset;
+    if (fov < 1.0f)
+        fov = 1.0f;
+    if (fov > 45.0f)
+        fov = 45.0f;
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
