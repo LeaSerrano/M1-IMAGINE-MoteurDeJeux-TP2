@@ -13,7 +13,7 @@ in vec4 height;
 
 void main(){
 
-        /*if (height.r > 0.8) {
+        if (height.r > 0.8) {
                 color = texture(grassTexture, o_uv0);
         }
         else if (height.r < 0.6) {
@@ -21,9 +21,9 @@ void main(){
         }
         else {
                 color = texture(rockTexture, o_uv0);
-        }*/
+        }
 
-        color = texture(grassTexture, o_uv0);
+        //color = texture(grassTexture, o_uv0);
         //color = vec4(o_uv0, 0, 1);
         //color = vec4(0.2, 0.2, 0.4, 1);
 

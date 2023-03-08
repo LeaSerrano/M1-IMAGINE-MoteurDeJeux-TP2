@@ -51,18 +51,32 @@ float fov = 45.0f;
 float deltaTime = 0.0f;	// time between current frame and last frame
 float lastFrame = 0.0f;
 
+float timeSpeed = 1.0;
+
 //rotation
 float angle = 0.;
 float zoom = 1.;
 
+bool display_cameraOrbitale = false;
 
-bool keyIsPressed = false;
+bool PkeyIsPressed = false;
+bool SemicolonkeyIsPressed = false;
+bool CkeyIsPressed = false;
+bool UpKeyIsPressed = false;
+bool DownKeyIsPressed = false;
 
 int resolution = 2;
 std::vector<unsigned short> indices; //Triangles concaténés dans une liste
 std::vector<std::vector<unsigned short> > triangles;
 std::vector<glm::vec3> indexed_vertices;
 std::vector<float> textureData;
+
+bool isGrassTextureAlreadyImported = false;
+bool isRockTextureAlreadyImported = false;
+bool isSnowrocksTextureAlreadyImported = false;
+bool isHeightMapTextureAlreadyImported = false;
+
+float timeCst = 0;
 /*******************************************************************************/
 
 std::vector<int> getIndex(std::vector<glm::vec3> indexed_vertices, glm::vec3 point) {
@@ -149,9 +163,8 @@ std::vector<unsigned short> generateTriangle(int resolution) {
     return id;
 }
 
-std::vector<float> generateTextureCoords(float length, int resolution/*, float *squareTextureData*/) {
+std::vector<float> generateTextureCoords(float length, int resolution) {
 
-    //squareTextureData = new float[resolution * resolution * 8];
     std::vector<float> data;
     data.resize(resolution * resolution * 8);
 
@@ -276,10 +289,6 @@ int main( void )
     // Get a handle for our "Model View Projection" matrices uniforms
 
     /****************************************/
-    /*std::vector<unsigned short> indices; //Triangles concaténés dans une liste
-    std::vector<std::vector<unsigned short> > triangles;
-    std::vector<glm::vec3> indexed_vertices;*/
-
     //Chargement du fichier de maillage
     /*std::string filename("cube.off");
     loadOFF(filename, indexed_vertices, indices, triangles );*/
@@ -296,24 +305,11 @@ int main( void )
 
     // Load it into a VBO
     GLuint vertexbuffer;
-    /*glGenBuffers(1, &vertexbuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-    glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);*/
 
     // Generate a buffer for the indices as well
     GLuint elementbuffer;
-    /*glGenBuffers(1, &elementbuffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);*/
 
     GLuint textureBuffer;
-    /*glGenBuffers(1, &textureBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, textureBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(squareTextureData), &squareTextureData, GL_STATIC_DRAW);*/
-
-    /*unsigned int texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);*/
 
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -361,10 +357,24 @@ int main( void )
         /****************************************/
         glm::mat4 modelMatrix, viewMatrix, projectionMatrix;
 
-        modelMatrix = glm::mat4(1.0f);
-
         viewMatrix = glm::lookAt(camera_position, camera_position + camera_target, camera_up);
+
+        if (!display_cameraOrbitale) {
+
+            modelMatrix = glm::mat4(1.0f);
+        }
+        else if (display_cameraOrbitale) {
+
+            timeCst += deltaTime*timeSpeed;
+
+            modelMatrix = glm::mat4(1.0f);
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+            modelMatrix = glm::rotate(modelMatrix, timeCst, glm::vec3(0, 1, 0));
+        }
+
         projectionMatrix = glm::perspective(glm::radians(45.0f), 4.0f/3.0f, 0.1f, 100.0f);
+
 
         glUniformMatrix4fv(glGetUniformLocation(programID, "view"), 1 , GL_FALSE, &viewMatrix[0][0]);
         glUniformMatrix4fv(glGetUniformLocation(programID, "projection"), 1 , GL_FALSE, &projectionMatrix[0][0]);
@@ -372,16 +382,16 @@ int main( void )
 
 
         glGenBuffers(1, &vertexbuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-    glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+        glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);
 
-    glGenBuffers(1, &elementbuffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);
+        glGenBuffers(1, &elementbuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);
 
-    glGenBuffers(1, &textureBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, textureBuffer);
-    glBufferData(GL_ARRAY_BUFFER, textureData.size() * sizeof(float), &textureData[0], GL_STATIC_DRAW);
+        glGenBuffers(1, &textureBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, textureBuffer);
+        glBufferData(GL_ARRAY_BUFFER, textureData.size() * sizeof(float), &textureData[0], GL_STATIC_DRAW);
 
         // 1rst attribute buffer : vertices
         glEnableVertexAttribArray(0);
@@ -402,21 +412,37 @@ int main( void )
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2*sizeof(float), (void*)0);
         glEnableVertexAttribArray(1);
 
-        glActiveTexture(GL_TEXTURE0);
-        loadBMP_custom("grass.bmp");
-        glUniform1i(glGetUniformLocation(programID, "grassTexture"), 0);
+        if (!isGrassTextureAlreadyImported) {
+            glActiveTexture(GL_TEXTURE0);
+            loadBMP_custom("grass.bmp");
+            glUniform1i(glGetUniformLocation(programID, "grassTexture"), 0);
 
-        glActiveTexture(GL_TEXTURE1);
-        loadBMP_custom("rock.bmp");
-        glUniform1i(glGetUniformLocation(programID, "rockTexture"), 1);
+            isGrassTextureAlreadyImported = true;
+        }
 
-        glActiveTexture(GL_TEXTURE2);
-        loadBMP_custom("snowrocks.bmp");
-        glUniform1i(glGetUniformLocation(programID, "snowrocksTexture"), 2);
+        if (!isRockTextureAlreadyImported) {
+            glActiveTexture(GL_TEXTURE1);
+            loadBMP_custom("rock.bmp");
+            glUniform1i(glGetUniformLocation(programID, "rockTexture"), 1);
 
-        glActiveTexture(GL_TEXTURE3);
-        loadBMP_custom("Heightmap_Mountain.bmp");
-        glUniform1i(glGetUniformLocation(programID, "textureCoords"), 3);
+            isRockTextureAlreadyImported = true;
+        }
+
+        if (!isSnowrocksTextureAlreadyImported) {
+            glActiveTexture(GL_TEXTURE2);
+            loadBMP_custom("snowrocks.bmp");
+            glUniform1i(glGetUniformLocation(programID, "snowrocksTexture"), 2);
+
+            isSnowrocksTextureAlreadyImported = true;
+        }
+
+        if (!isHeightMapTextureAlreadyImported) {
+            glActiveTexture(GL_TEXTURE3);
+            loadBMP_custom("Heightmap_Mountain.bmp");
+            glUniform1i(glGetUniformLocation(programID, "textureCoords"), 3);
+
+            isHeightMapTextureAlreadyImported = true;
+        }
         
         // Draw the triangles !
         glDrawElements(
@@ -439,6 +465,7 @@ int main( void )
     // Cleanup VBO and shader
     glDeleteBuffers(1, &vertexbuffer);
     glDeleteBuffers(1, &elementbuffer);
+    glDeleteBuffers(1, &textureBuffer);
     glDeleteProgram(programID);
     glDeleteVertexArrays(1, &VertexArrayID);
 
@@ -495,34 +522,64 @@ void processInput(GLFWwindow *window)
     }*/
 
 
-    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS && !keyIsPressed) {
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS && !PkeyIsPressed) {
         resolution ++;
-
-        std::cout << resolution << std::endl;
 
         indexed_vertices = generatePlan(1, resolution);
         indices = generateTriangle(resolution);
         textureData = generateTextureCoords(1, resolution);
 
-        keyIsPressed = true;
+        PkeyIsPressed = true;
     }
     else if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE)
     {
-        keyIsPressed = false;
+        PkeyIsPressed = false;
     }
 
-    if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_PRESS && !keyIsPressed) {
+    if (glfwGetKey(window, GLFW_KEY_SEMICOLON) == GLFW_PRESS && !SemicolonkeyIsPressed) { //M
         resolution--;
-
-        std::cout << resolution << std::endl;
 
         indexed_vertices = generatePlan(1, resolution);
         indices = generateTriangle(resolution);
         textureData = generateTextureCoords(1, resolution);
+
+        SemicolonkeyIsPressed = true;
     }
-    else if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_RELEASE)
+    else if (glfwGetKey(window, GLFW_KEY_SEMICOLON) == GLFW_RELEASE)
     {
-        keyIsPressed = false;
+        SemicolonkeyIsPressed = false;
+    }
+
+
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !CkeyIsPressed) {
+        display_cameraOrbitale = !display_cameraOrbitale;
+
+        CkeyIsPressed = true;
+    }
+    else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE)
+    {
+        CkeyIsPressed = false;
+    }
+
+
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS && !UpKeyIsPressed) {
+        timeSpeed += 0.1;
+
+        UpKeyIsPressed = true;
+    }
+    else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE)
+    {
+        UpKeyIsPressed = false;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && !DownKeyIsPressed) {
+        timeSpeed -= 0.1;
+
+        DownKeyIsPressed = true;
+    }
+    else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE)
+    {
+        DownKeyIsPressed = false;
     }
 
 
@@ -539,8 +596,6 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
         lastY = ypos;
         firstMouse = false;
     }
-
-    std::cout << "hey" << std::endl;
 
     float xoffset = xpos - lastX;
     float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
